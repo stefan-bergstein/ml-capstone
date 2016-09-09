@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 # %matplotlib inline
 
-
 from sklearn import cross_validation
 from sklearn.svm import SVC
 from sklearn.svm import LinearSVC
@@ -20,7 +19,6 @@ from sklearn.feature_selection import RFE
 from sklearn.linear_model import LogisticRegression
 
 from sklearn.grid_search import GridSearchCV
-
 
 my_random_seed = 66
 
@@ -95,7 +93,7 @@ clf_C = LinearSVC(C=0.1)
 clf_D = GaussianNB()
 
 
-# loop thru models, then thru train sizes
+# loop thru models
 for clf in [clf_A, clf_B, clf_C, clf_D]:
     print "\n{}: \n".format(clf.__class__.__name__)
     train_predict(clf, X_train, y_train, X_test, y_test)
@@ -111,7 +109,7 @@ scaler = StandardScaler()
 scaled_features = features
 scaled_features.ix[:,0:] = scaler.fit_transform(scaled_features.ix[:,0:])
 
-# Shuffle and split the dataset
+# Shuffle and split the scaled  dataset
 
 scaled_X_train, scaled_X_test, scaled_y_train, scaled_y_test  = cross_validation.train_test_split(scaled_features, labels, stratify=labels, test_size=0.25, random_state=my_random_seed)
 
@@ -200,12 +198,14 @@ print(grid_search.best_score_)
 scores = [x[1] for x in grid_search.grid_scores_]
 scores = np.array(scores).reshape(6, 5)
 
+'''
 plt.matshow(scores)
 plt.xlabel('gamma')
 plt.ylabel('C')
 plt.colorbar()
 plt.xticks(np.arange(5), param_grid['gamma'])
 plt.yticks(np.arange(6), param_grid['C']);
+'''
 
 # To avoid overfitting, do GridSearchCV only on training data
 grid_search = GridSearchCV(SVC(), param_grid, cv=5)
@@ -218,5 +218,27 @@ print "Score for test set: {:.4f}.".format(grid_search.score(sr_X_test, sr_y_tes
     
 # Do Cross vaildation with all data   
 scores =  cross_validation.cross_val_score(grid_search, srfeatures, labels, cv=5)
-print "cross_validation:", scores, scores.mean()
+print "Final cross_validation:", scores, scores.mean()
 
+# Save labels and final predictions
+y_pred = grid_search.predict(srfeatures)
+df = pd.DataFrame(labels)
+df['y'] = y_pred
+df.to_csv('final_pred.csv')
+
+# validate the robustness of this model by manipulating the input data
+# to see how the models solution is affected - sensitivity analysis
+print "Score for un-manipulated data: {:.4f}.".format( f1_score(labels, y_pred, pos_label='yes', average='micro'))
+
+from random import randint
+for p in [ 0, 5, 10, 15, 20, 25, 30, 40, 50]:
+    mani_srfeatures = srfeatures.copy()
+    
+    for c in mani_srfeatures.columns:
+        mani_srfeatures[c] = mani_srfeatures[c] * 1.+randint((p*-1),p)*0.01
+    
+    y_pred_m = grid_search.predict(mani_srfeatures)
+
+    print "Score for up to {:.1f} % manipulated data: {:.4f}.".format( p, f1_score(labels, y_pred_m, pos_label='yes', average='micro'))
+
+    
